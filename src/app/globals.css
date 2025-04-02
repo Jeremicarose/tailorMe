@@ -2,20 +2,31 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+@import 'react-big-calendar/lib/css/react-big-calendar.css';
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  @apply bg-gray-100;
+}
+
+.container {
+  @apply max-w-6xl mx-auto px-4;
+}
+
+/* Additional Calendar Styles */
+.rbc-calendar {
+  min-height: 500px;
+  width: 100%;
+}
+
+.rbc-month-view {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+}
+
+.rbc-date-cell {
+  padding: 5px;
+}
+
+.rbc-selected {
+  background-color: theme('colors.blue.100');
 }

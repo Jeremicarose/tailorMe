@@ -1,0 +1,256 @@
+// prisma/schema.prisma
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  role          UserRole  @default(CUSTOMER)
+  phoneNumber   String?
+  
+  accounts      Account[]
+  sessions      Session[]
+  bookings      Booking[]
+  
+  // Reviews where this user is the subject
+  receivedReviews Review[] @relation("ReviewedTailor")
+  
+  // Reviews created by this user
+  createdReviews  Review[] @relation("UserReviews")
+  
+  // Messages sent by this user
+  sentMessages    Message[] @relation("SentMessages")
+  
+  // Optional: If a user is a tailor
+  tailorProfile Tailor?
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?
+  access_token       String?
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Tailor {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id])
+  
+  specialty     String?
+  bio           String?
+  location      String?
+  
+  // New geocoding fields
+  latitude      Float?   // Latitude coordinate
+  longitude     Float?  // Longitude coordinate
+  address       String? // Full address for precise location
+  
+  // New profile management fields
+  availability   AvailabilityStatus? @default(OPEN)
+  maxDailyBookings     Int                @default(5)
+  bookingNoticePeriod  String             @default("1 week")
+  unavailableDates     Json?              // Store as JSON array of dates
+  
+  // Existing reliability tracking fields
+  completionRate Float   @default(0.0)
+  averageRating  Float   @default(0.0)
+  totalProjects  Int     @default(0)
+  onTimeDeliveries Int   @default(0)
+  
+  bookings      Booking[]
+  services      Service[]
+  reviews       Review[]
+  projects      Project[]
+  availabilities Availability[]
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Service {
+  id          String   @id @default(cuid())
+  tailorId    String
+  tailor      Tailor   @relation(fields: [tailorId], references: [id])
+  
+  name        String
+  description String?
+  price       Float
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Availability {
+  id        String   @id @default(cuid())
+  tailorId  String
+  tailor    Tailor   @relation(fields: [tailorId], references: [id])
+  
+  // Date and time fields
+  date      DateTime
+  startTime DateTime
+  endTime   DateTime
+  
+  // Recurring availability
+  isRecurring    Boolean  @default(false)
+  recurringDays  String   @default("") // Store as comma-separated string "0,1,2,3,4,5,6"
+  
+  // Status
+  status    AvailabilityStatus @default(AVAILABLE)
+  
+  // Bookings for this time slot
+  bookings  Booking[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Booking {
+  id         String      @id @default(cuid())
+  userId     String
+  tailorId   String
+  availabilityId String
+  
+  user       User        @relation(fields: [userId], references: [id])
+  tailor     Tailor      @relation(fields: [tailorId], references: [id])
+  availability Availability @relation(fields: [availabilityId], references: [id])
+  
+  // Booking details
+  requestedDeliveryDate DateTime
+  actualDeliveryDate   DateTime?
+  description         String?
+  measurements        Json?      // Store detailed measurements
+  
+  // Project timeline
+  startDate   DateTime?
+  endDate     DateTime?
+  
+  // Status tracking
+  status     BookingStatus @default(PENDING)
+  notes      String?
+  
+  // Communication
+  messages   Message[]
+  
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  bookingId String
+  booking   Booking  @relation(fields: [bookingId], references: [id])
+  senderId  String
+  sender    User     @relation("SentMessages", fields: [senderId], references: [id])
+  content   String
+  isRead    Boolean  @default(false)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Review {
+  id          String   @id @default(cuid())
+  tailorId    String
+  tailor      Tailor   @relation(fields: [tailorId], references: [id])
+  
+  userId      String
+  user        User     @relation("ReviewedTailor", fields: [userId], references: [id])
+  
+  reviewerId  String
+  reviewer    User     @relation("UserReviews", fields: [reviewerId], references: [id])
+  
+  rating      Float
+  comment     String?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  tailorId    String
+  tailor      Tailor   @relation(fields: [tailorId], references: [id])
+  
+  name        String
+  description String?
+  status      ProjectStatus @default(IN_PROGRESS)
+  
+  startDate   DateTime @default(now())
+  endDate     DateTime?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+enum UserRole {
+  CUSTOMER
+  TAILOR
+  ADMIN
+}
+
+enum BookingStatus {
+  PENDING
+  ACCEPTED
+  IN_PROGRESS
+  READY_FOR_FITTING
+  COMPLETED
+  CANCELLED
+  REJECTED
+}
+
+enum AvailabilityStatus {
+  OPEN
+  LIMITED
+  CLOSED
+  AVAILABLE
+  BOOKED
+  BLOCKED
+}
+
+enum ProjectStatus {
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
