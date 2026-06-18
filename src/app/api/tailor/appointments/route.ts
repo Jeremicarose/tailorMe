@@ -1,19 +1,21 @@
 // src/app/api/tailor/appointments/route.ts
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
-import { prisma } from "/Users/jeremicarose/Documents/tailor-me/src/lib/prisma"
+import { prisma } from '@/lib/prisma'
+import { authOptions } from '@/lib/auth'
+import { expireStaleInitiatedBookings } from '@/lib/expire-stale-payments'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    const session = await getServerSession()
-    
-    console.log('Session:', JSON.stringify(session, null, 2))
-    
+    await expireStaleInitiatedBookings()
+    const session = await getServerSession(authOptions)
+
     if (!session?.user?.email) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
-    // Find the user
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
       include: {
@@ -21,37 +23,23 @@ export async function GET() {
       }
     })
 
-    console.log('User:', JSON.stringify(user, null, 2))
-
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    // Check if the user is a tailor
     if (user.role !== 'TAILOR') {
       return NextResponse.json({ error: 'User is not a tailor' }, { status: 403 })
     }
 
-    // If no tailor profile exists, create one
-    let tailorProfile = user.tailorProfile
-    if (!tailorProfile) {
-      tailorProfile = await prisma.tailor.create({
-        data: {
-          userId: user.id,
-          specialty: 'General Tailoring',
-          bio: 'Professional Tailor',
-          location: 'Not Specified'
-        }
-      })
-      console.log('Created new tailor profile:', JSON.stringify(tailorProfile, null, 2))
+    if (!user.tailorProfile) {
+      return NextResponse.json([], { status: 200 })
     }
 
-    // Fetch bookings for this tailor
     const bookings = await prisma.booking.findMany({
       where: {
-        tailorId: tailorProfile.id,
+        tailorId: user.tailorProfile.id,
         status: {
-          in: ['PENDING', 'CONFIRMED']
+          in: ['PENDING', 'ACCEPTED', 'IN_PROGRESS', 'READY_FOR_FITTING']
         }
       },
       include: {
@@ -59,28 +47,35 @@ export async function GET() {
           select: {
             name: true
           }
+        },
+        availability: {
+          select: {
+            date: true,
+            startTime: true,
+            endTime: true
+          }
         }
-      },
-      orderBy: {
-        date: 'asc'
       }
     })
 
-    console.log('Bookings:', JSON.stringify(bookings, null, 2))
-
-    // Transform the data to match the frontend interface
-    const formattedAppointments = bookings.map(booking => ({
+    const formattedAppointments = bookings
+      .map((booking) => ({
       id: booking.id,
       customerName: booking.user.name || 'Unknown Customer',
-      date: booking.date.toISOString().split('T')[0],
-      time: booking.date.toISOString().split('T')[1].slice(0, 5),
-      service: 'Tailoring Service', 
-      status: booking.status
-    }))
+      date: booking.availability.date.toISOString().split('T')[0],
+      time: booking.availability.startTime.toISOString().slice(11, 16),
+      service: booking.description || 'Tailoring Service',
+      status: booking.status,
+      paymentStatus: booking.paymentStatus,
+      }))
+      .sort((left, right) => {
+        const leftValue = `${left.date}T${left.time}`
+        const rightValue = `${right.date}T${right.time}`
+        return leftValue.localeCompare(rightValue)
+      })
 
     return NextResponse.json(formattedAppointments)
   } catch (error) {
-    console.error('Error fetching appointments:', error)
     return NextResponse.json({ 
       error: 'Internal server error', 
       details: error instanceof Error ? error.message : 'Unknown error' 

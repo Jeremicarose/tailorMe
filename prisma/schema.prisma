@@ -86,6 +86,15 @@ model Tailor {
   latitude      Float?   // Latitude coordinate
   longitude     Float?  // Longitude coordinate
   address       String? // Full address for precise location
+
+  verificationStatus TailorVerificationStatus @default(UNVERIFIED)
+  verificationSubmittedAt DateTime?
+  verificationReviewedAt DateTime?
+  verificationNotes String?
+  identityDocumentUrl String?
+  businessName String?
+  yearsOfExperience Int?
+  portfolioApproved Boolean @default(false)
   
   // New profile management fields
   availability   AvailabilityStatus? @default(OPEN)
@@ -168,6 +177,14 @@ model Booking {
   
   // Status tracking
   status     BookingStatus @default(PENDING)
+  paymentStatus PaymentStatus @default(UNPAID)
+  paymentMethod String?
+  paymentAmount Float?
+  paymentReference String?
+  paymentMerchantRequestId String?
+  paymentRequestedAt DateTime?
+  paymentConfirmedAt DateTime?
+  paymentFailureReason String?
   notes      String?
   
   // Communication
@@ -253,4 +270,19 @@ enum ProjectStatus {
   IN_PROGRESS
   COMPLETED
   CANCELLED
+}
+
+enum PaymentStatus {
+  UNPAID
+  INITIATED
+  PAID
+  FAILED
+  CANCELLED
+}
+
+enum TailorVerificationStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  REJECTED
 }

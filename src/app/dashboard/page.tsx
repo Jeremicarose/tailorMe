@@ -7,15 +7,15 @@ import Link from 'next/link'
 import { UserRole } from '@prisma/client'
 import { motion } from 'framer-motion'
 import {
-  User, ClipboardList, Calendar, MapPin, Settings, Star,
-  ChevronRight, Loader2, Bell, Scissors, TrendingUp, Users
+  User, ClipboardList, Calendar, MapPin, Settings,
+  ChevronRight, Loader2, Bell, Scissors, Users
 } from "lucide-react"
 
 interface DashboardStats {
-  totalOrders?: number;
-  pendingOrders?: number;
-  totalRevenue?: number;
-  newMessages?: number;
+  totalOrders?: number
+  pendingOrders?: number
+  totalRevenue?: number
+  newMessages?: number
 }
 
 export default function Dashboard() {
@@ -31,34 +31,45 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    if (status === 'authenticated' && session?.user) {
-      Promise.all([
-        fetchDashboardStats(),
-        initializeDashboard()
-      ]).finally(() => setIsLoading(false))
-    }
-  }, [session, status])
-
   const fetchDashboardStats = async () => {
-    // Simulated stats - replace with actual API call
-    setStats({
-      totalOrders: 124,
-      pendingOrders: 8,
-      totalRevenue: 12580,
-      newMessages: 3
-    })
+    try {
+      const response = await fetch('/api/dashboard/stats')
+      if (!response.ok) {
+        throw new Error('Failed to load dashboard statistics')
+      }
+
+      const data = await response.json()
+      setStats(data)
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to load dashboard statistics')
+    }
   }
 
   const initializeDashboard = async () => {
     try {
       const sections = getUserDashboardSections(session?.user?.role)
       setDashboardSections(sections)
-    } catch (err) {
-      console.error('Dashboard initialization error:', err)
+    } catch {
       setError('Unable to load dashboard. Please try again.')
     }
   }
+
+  useEffect(() => {
+    if (status === 'authenticated') {
+      if (session?.user?.role === 'TAILOR') {
+        const hasCompletedProfile = !!session.user.tailorProfile?.specialty
+        if (!hasCompletedProfile) {
+          redirect('/dashboard/profile')
+          return
+        }
+      }
+
+      Promise.all([
+        fetchDashboardStats(),
+        initializeDashboard()
+      ]).finally(() => setIsLoading(false))
+    }
+  }, [session, status])
 
   if (isLoading) {
     return (
@@ -116,24 +127,24 @@ export default function Dashboard() {
             title: 'Orders & Projects',
             description: 'Manage ongoing and upcoming projects.',
             action: 'View Orders',
-            link: '/dashboard/orders',
+            link: '/dashboard/order',
             bgGradient: 'from-blue-50 to-blue-100/50',
             badge: stats.pendingOrders ? `${stats.pendingOrders} pending` : null
           },
           {
             icon: <Calendar className="h-6 w-6 text-violet-500" />,
-            title: 'Schedule Manager',
+            title: 'Appointments',
             description: 'Organize appointments and availability.',
             action: 'Open Calendar',
-            link: '/dashboard/schedule',
+            link: '/dashboard/appointments',
             bgGradient: 'from-violet-50 to-violet-100/50'
           },
           {
-            icon: <TrendingUp className="h-6 w-6 text-emerald-500" />,
-            title: 'Business Insights',
-            description: 'Track your performance and analytics.',
-            action: 'View Analytics',
-            link: '/dashboard/analytics',
+            icon: <MapPin className="h-6 w-6 text-emerald-500" />,
+            title: 'Map Presence',
+            description: 'Review how customers see your location and listing.',
+            action: 'Open Map',
+            link: '/dashboard/map',
             bgGradient: 'from-emerald-50 to-emerald-100/50'
           }
         ]
@@ -165,11 +176,11 @@ export default function Dashboard() {
             badge: stats.totalOrders ? `${stats.totalOrders} total` : null
           },
           {
-            icon: <Star className="h-6 w-6 text-amber-500" />,
-            title: 'Tailor Network',
-            description: 'Browse portfolios and reviews.',
-            action: 'Explore',
-            link: '/dashboard/network',
+            icon: <MapPin className="h-6 w-6 text-amber-500" />,
+            title: 'Discover Tailors',
+            description: 'Browse tailor locations, portfolios, and reviews.',
+            action: 'Explore Map',
+            link: '/dashboard/map',
             bgGradient: 'from-amber-50 to-amber-100/50'
           }
         ]
@@ -177,18 +188,26 @@ export default function Dashboard() {
         return [
           {
             icon: <Users className="h-6 w-6 text-slate-500" />,
-            title: 'User Management',
-            description: 'Manage users and permissions.',
-            action: 'Manage Users',
-            link: '/admin/users',
+            title: 'Client Management',
+            description: 'Review customers and measurement records.',
+            action: 'Manage Clients',
+            link: '/dashboard/ClientManagement',
             bgGradient: 'from-slate-50 to-slate-100/50'
           },
           {
+            icon: <Settings className="h-6 w-6 text-indigo-500" />,
+            title: 'Tailor Verification',
+            description: 'Review and approve tailor trust submissions.',
+            action: 'Open Queue',
+            link: '/dashboard/verification',
+            bgGradient: 'from-indigo-50 to-indigo-100/50'
+          },
+          {
             icon: <Settings className="h-6 w-6 text-slate-500" />,
-            title: 'System Settings',
-            description: 'Configure system preferences.',
-            action: 'Open Settings',
-            link: '/admin/settings',
+            title: 'Profile',
+            description: 'Review account configuration.',
+            action: 'Open Profile',
+            link: '/dashboard/profile',
             bgGradient: 'from-slate-50 to-slate-100/50'
           }
         ]
@@ -217,7 +236,7 @@ export default function Dashboard() {
                     Welcome back, {session?.user?.name || 'User'}
                   </h1>
                   <p className="text-slate-500 mt-1">
-                    Here's what's happening with your {session?.user?.role?.toLowerCase()} account
+                    Here&apos;s what&apos;s happening with your {session?.user?.role?.toLowerCase()} account
                   </p>
                 </div>
               </div>

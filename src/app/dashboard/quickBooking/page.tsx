@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -12,6 +12,22 @@ interface BookingFormData {
   requestedDeliveryDate: Date | null
   description: string
   measurements: Record<string, any>
+}
+
+interface TailorOption {
+  id: string
+  name: string
+  specialty?: string | null
+  averageRating?: number
+  verificationStatus?: 'UNVERIFIED' | 'PENDING' | 'VERIFIED' | 'REJECTED'
+}
+
+interface AvailabilityOption {
+  id: string
+  date: string
+  startTime: string
+  endTime: string
+  status: string
 }
 
 const QuickBooking: React.FC = () => {
@@ -27,11 +43,84 @@ const QuickBooking: React.FC = () => {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [currentStep, setCurrentStep] = useState(1)
+  const [tailors, setTailors] = useState<TailorOption[]>([])
+  const [availabilities, setAvailabilities] = useState<AvailabilityOption[]>([])
+  const [isTailorsLoading, setIsTailorsLoading] = useState(true)
+  const [isAvailabilitiesLoading, setIsAvailabilitiesLoading] = useState(false)
 
   const handleInputChange = (field: keyof BookingFormData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }))
     setError('')
   }
+
+  useEffect(() => {
+    const fetchTailors = async () => {
+      try {
+        setIsTailorsLoading(true)
+        const response = await fetch('/api/tailor/map')
+        if (!response.ok) {
+          throw new Error('Failed to load tailors')
+        }
+
+        const data = await response.json()
+        const mappedTailors: TailorOption[] = Array.isArray(data)
+          ? data.map((tailor: any) => ({
+              id: tailor.id,
+              name: tailor.name,
+              specialty: tailor.specialty,
+              averageRating: tailor.averageRating,
+              verificationStatus: tailor.verificationStatus,
+            }))
+          : []
+
+        setTailors(mappedTailors)
+      } catch (fetchError) {
+        setError(fetchError instanceof Error ? fetchError.message : 'Failed to load tailors')
+      } finally {
+        setIsTailorsLoading(false)
+      }
+    }
+
+    fetchTailors()
+  }, [])
+
+  useEffect(() => {
+    if (!formData.tailorId) {
+      setAvailabilities([])
+      return
+    }
+
+    const fetchAvailabilities = async () => {
+      try {
+        setIsAvailabilitiesLoading(true)
+        const response = await fetch(`/api/tailor/${formData.tailorId}/availability`)
+        if (!response.ok) {
+          throw new Error('Failed to load availability')
+        }
+
+        const data = await response.json()
+        setAvailabilities(Array.isArray(data) ? data : [])
+      } catch (fetchError) {
+        setError(fetchError instanceof Error ? fetchError.message : 'Failed to load availability')
+        setAvailabilities([])
+      } finally {
+        setIsAvailabilitiesLoading(false)
+      }
+    }
+
+    fetchAvailabilities()
+  }, [formData.tailorId])
+
+  const availabilityOptions = useMemo(() => {
+    return availabilities.map((availability) => {
+      const start = new Date(availability.startTime)
+      const end = new Date(availability.endTime)
+      return {
+        id: availability.id,
+        label: `${start.toLocaleDateString()} • ${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+      }
+    })
+  }, [availabilities])
 
   const validateForm = () => {
     if (!formData.tailorId) return 'Please select a tailor'
@@ -96,13 +185,23 @@ const QuickBooking: React.FC = () => {
               <select
                 className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-shadow"
                 value={formData.tailorId}
-                onChange={(e) => handleInputChange('tailorId', e.target.value)}
+                onChange={(e) => {
+                  handleInputChange('tailorId', e.target.value)
+                  handleInputChange('availabilityId', '')
+                }}
                 required
+                disabled={isTailorsLoading}
               >
-                <option value="">Choose a tailor...</option>
-                <option value="1">John Smith - Formal Wear Specialist</option>
-                <option value="2">Sarah Johnson - Wedding Dress Expert</option>
-                <option value="3">Mike Brown - Custom Suits</option>
+                <option value="">
+                  {isTailorsLoading ? 'Loading tailors...' : 'Choose a tailor...'}
+                </option>
+                {tailors
+                  .filter((tailor) => tailor.verificationStatus === 'VERIFIED')
+                  .map((tailor) => (
+                  <option key={tailor.id} value={tailor.id}>
+                    {tailor.name}{tailor.specialty ? ` - ${tailor.specialty}` : ''}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -115,11 +214,22 @@ const QuickBooking: React.FC = () => {
                 value={formData.availabilityId}
                 onChange={(e) => handleInputChange('availabilityId', e.target.value)}
                 required
+                disabled={!formData.tailorId || isAvailabilitiesLoading}
               >
-                <option value="">Select a time slot...</option>
-                <option value="1">Monday, 10:00 AM</option>
-                <option value="2">Monday, 2:00 PM</option>
-                <option value="3">Tuesday, 11:00 AM</option>
+                <option value="">
+                  {!formData.tailorId
+                    ? 'Select a tailor first...'
+                    : isAvailabilitiesLoading
+                      ? 'Loading available slots...'
+                      : availabilityOptions.length === 0
+                        ? 'No available slots found'
+                        : 'Select a time slot...'}
+                </option>
+                {availabilityOptions.map((availability) => (
+                  <option key={availability.id} value={availability.id}>
+                    {availability.label}
+                  </option>
+                ))}
               </select>
             </div>
           </div>

@@ -13,16 +13,8 @@ import {
 } from 'react-icons/fa'
 import { useSession } from 'next-auth/react'
 import TailorPortfolio from '../../components/TailorPortfolio'
-import AvailabilityCalendar from '../../components/AvailabilityCalendar'
-import BookingModal from '../../components/BookingModal'
-
-// Add interface for BookingDetails
-interface BookingDetails {
-  date: string;
-  time: string;
-  service: string;
-  tailorId: string;
-}
+import AvailabilityCalendar, { type TailorAvailability } from '../../components/AvailabilityCalendar'
+import BookingModal, { type BookingDetails } from '../../components/BookingModal'
 
 // Add type definition for Tailor
 interface Tailor {
@@ -38,26 +30,37 @@ interface Tailor {
     profileImage: string;
     services: string[];
     completionRate: number;
+    verificationStatus: 'UNVERIFIED' | 'PENDING' | 'VERIFIED' | 'REJECTED';
+    verificationNotes?: string | null;
+    businessName?: string | null;
+    yearsOfExperience?: number | null;
+    portfolioApproved?: boolean;
 }
 
 export default function TailorDetailPage({
     params
 }: {
-    params: { tailorId: string }
+    params: Promise<{ tailorId: string }>
 }) {
     const { data: session } = useSession()
     const [tailor, setTailor] = useState<Tailor | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [showBookingModal, setShowBookingModal] = useState(false)
-    const [selectedAvailability, setSelectedAvailability] = useState(null)
+    const [selectedAvailability, setSelectedAvailability] = useState<TailorAvailability | null>(null)
+    const [tailorId, setTailorId] = useState<string>('')
 
     useEffect(() => {
+        let isMounted = true
+
         const fetchTailorDetails = async () => {
             try {
                 setIsLoading(true)
+                const resolvedParams = await params
+                if (!isMounted) return
+                setTailorId(resolvedParams.tailorId)
                 
-                const response = await fetch(`/api/tailors/${params.tailorId}`)
+                const response = await fetch(`/api/tailors/${resolvedParams.tailorId}`)
                 
                 if (!response.ok) {
                     throw new Error('Failed to fetch tailor details')
@@ -69,46 +72,51 @@ export default function TailorDetailPage({
                 console.error('Tailor fetch error:', err)
                 setError(err instanceof Error ? err.message : 'An unknown error occurred')
             } finally {
-                setIsLoading(false)
+                if (isMounted) {
+                    setIsLoading(false)
+                }
             }
         }
 
         fetchTailorDetails()
-    }, [params.tailorId])
+        return () => {
+            isMounted = false
+        }
+    }, [params])
 
-    const handleBookAppointment = async ({
-        date,
-        time,
-        service
-    }: BookingDetails) => {
+    const prepareBooking = async (bookingDetails: BookingDetails) => {
         if (!session?.user?.id) {
-            alert('Please log in to book an appointment');
-            return;
+            throw new Error('Please log in to book an appointment')
         }
 
-        try {
-            const response = await fetch('/api/bookings', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    tailorId: params.tailorId,
-                    userId: session.user.id,
-                    date,
-                    time,
-                    service
-                })
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to book appointment');
-            }
-
-            alert('Appointment booked successfully!');
-            setShowBookingModal(false);
-        } catch (error) {
-            alert('Failed to book appointment. Please try again.');
+        if (!selectedAvailability) {
+            throw new Error('Please select an availability slot first')
         }
-    };
+
+        const response = await fetch('/api/booking', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                tailorId,
+                availabilityId: selectedAvailability.id,
+                requestedDeliveryDate: bookingDetails.requestedDeliveryDate,
+                description: bookingDetails.description,
+                measurements: {
+                    garmentType: bookingDetails.garmentType,
+                    complexity: bookingDetails.complexity,
+                    estimatedPrice: bookingDetails.estimatedPrice,
+                },
+            })
+        })
+
+        if (!response.ok) {
+            const data = await response.json().catch(() => null)
+            throw new Error(data?.error || 'Failed to book appointment')
+        }
+
+        const booking = await response.json()
+        return { bookingId: booking.id as string }
+    }
 
     if (isLoading) {
         return (
@@ -143,6 +151,18 @@ export default function TailorDetailPage({
                         </div>
                         <h1 className="text-2xl font-bold text-blue-700">{tailor.name}</h1>
                         <p className="text-gray-600">{tailor.specialty}</p>
+                        <div className="mt-3 flex justify-center gap-2">
+                            {tailor.verificationStatus === 'VERIFIED' && (
+                                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                                    Verified Tailor
+                                </span>
+                            )}
+                            {tailor.portfolioApproved && (
+                                <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+                                    Portfolio Approved
+                                </span>
+                            )}
+                        </div>
 
                         {/* Rating and Details */}
                         <div className="flex justify-center items-center mt-4 space-x-4">
@@ -163,10 +183,20 @@ export default function TailorDetailPage({
                         {/* Book Appointment Button */}
                         <button 
                             onClick={() => setShowBookingModal(true)}
-                            className="w-full mt-6 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors"
+                            className="w-full mt-6 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors disabled:cursor-not-allowed disabled:bg-blue-300"
+                            disabled={!selectedAvailability || tailor.verificationStatus !== 'VERIFIED'}
                         >
                             Book Appointment
                         </button>
+                        {tailor.verificationStatus !== 'VERIFIED' ? (
+                            <p className="mt-3 text-sm text-amber-600">
+                                This tailor must be verified before online bookings are enabled.
+                            </p>
+                        ) : !selectedAvailability && (
+                            <p className="mt-3 text-sm text-gray-500">
+                                Select an available time slot before booking.
+                            </p>
+                        )}
                     </div>
                 </div>
 
@@ -176,6 +206,12 @@ export default function TailorDetailPage({
                     <div className="bg-white shadow-md rounded-lg p-6">
                         <h2 className="text-xl font-semibold text-blue-700 mb-4">About Me</h2>
                         <p className="text-gray-700">{tailor.bio || 'No bio available'}</p>
+                        {(tailor.businessName || tailor.yearsOfExperience) && (
+                            <div className="mt-4 space-y-1 text-sm text-gray-600">
+                                {tailor.businessName && <p><span className="font-semibold">Business:</span> {tailor.businessName}</p>}
+                                {typeof tailor.yearsOfExperience === 'number' && <p><span className="font-semibold">Experience:</span> {tailor.yearsOfExperience} years</p>}
+                            </div>
+                        )}
                     </div>
 
                     {/* Availability Calendar */}
@@ -183,8 +219,13 @@ export default function TailorDetailPage({
                         <h2 className="text-xl font-semibold text-blue-700 mb-4">Availability</h2>
                         <AvailabilityCalendar 
                             tailorId={tailor.id} 
-                            isEditing={false} 
+                            onAvailabilitySelect={setSelectedAvailability}
                         />
+                        {selectedAvailability && (
+                            <p className="mt-4 rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-700">
+                                Selected slot: {new Date(selectedAvailability.startTime).toLocaleString()} to {new Date(selectedAvailability.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                        )}
                     </div>
 
                     {/* Tailor Portfolio */}
@@ -197,7 +238,7 @@ export default function TailorDetailPage({
                 <BookingModal 
                     tailorName={tailor.name}
                     onClose={() => setShowBookingModal(false)}
-                    onBookAppointment={handleBookAppointment}
+                    onPrepareBooking={prepareBooking}
                 />
             )}
         </div>

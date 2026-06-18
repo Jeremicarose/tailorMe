@@ -11,10 +11,6 @@ import Link from 'next/link'
 // Initialize Mapbox token
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || '';
 
-if (!MAPBOX_TOKEN) {
-  console.error('Mapbox token is required');
-}
-
 // Ensure RTL plugin is set only once
 if (typeof window !== 'undefined' && MAPBOX_TOKEN) {
   try {
@@ -27,8 +23,8 @@ if (typeof window !== 'undefined' && MAPBOX_TOKEN) {
         true // Lazy load the plugin
       );
     }
-  } catch (error) {
-    console.error('Error initializing Mapbox:', error);
+  } catch {
+    // Ignore plugin initialization failures and surface them via mapError if needed.
   }
 }
 
@@ -51,6 +47,8 @@ interface TailorMapData {
   services: string[]
   totalReviews: number
   completionRate: number
+  verificationStatus?: 'UNVERIFIED' | 'PENDING' | 'VERIFIED' | 'REJECTED'
+  portfolioApproved?: boolean
 }
 
 const TailorMarker = ({ name, isSelected }: { name: string; isSelected: boolean }) => (
@@ -152,7 +150,7 @@ export default function MapComponent({
 
   const zoomToNairobi = useCallback(() => {
     flyToLocation(defaultCenter.latitude, defaultCenter.longitude, 5);
-  }, [flyToLocation]);
+  }, [defaultCenter.latitude, defaultCenter.longitude, flyToLocation]);
 
   const handleTailorClick = useCallback((tailor: TailorMapData) => {
     setSelectedTailor(tailor)
@@ -175,7 +173,7 @@ export default function MapComponent({
         />
       </Marker>
     ));
-  }, [tailors, handleTailorClick, setSelectedTailor, selectedTailor]);
+  }, [tailors, handleTailorClick, selectedTailor]);
 
   // Debounce viewport updates
   const handleMove = useCallback((evt: any) => {
@@ -210,8 +208,7 @@ export default function MapComponent({
             setTimeout(zoomToNairobi, 2000);
           }}
           onMove={handleMove}
-          onError={(e) => {
-            console.error('Map error:', e);
+          onError={() => {
             setMapError('Error loading map');
           }}
         >
@@ -245,6 +242,18 @@ export default function MapComponent({
                   <div>
                     <h2 className="text-xl font-bold text-gray-800">{selectedTailor.name}</h2>
                     <p className="text-sm text-gray-500">{selectedTailor.specialty}</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {selectedTailor.verificationStatus === 'VERIFIED' && (
+                        <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">
+                          Verified
+                        </span>
+                      )}
+                      {selectedTailor.portfolioApproved && (
+                        <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-700">
+                          Portfolio Approved
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center">
                       {renderStars(selectedTailor.averageRating)}
                       <span className="ml-2 text-sm text-gray-600">

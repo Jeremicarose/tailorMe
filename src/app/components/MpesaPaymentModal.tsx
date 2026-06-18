@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react'
 import { FaMobileAlt, FaTimes } from 'react-icons/fa'
-import { initiateMpesaPayment } from '../../lib/mpesa'
 
 interface MpesaPaymentModalProps {
     amount: number
@@ -37,29 +36,34 @@ export default function MpesaPaymentModal({
             setError(null)
 
             try {
-                const paymentResponse= await initiateMpesaPayment({
+                const response = await fetch(`/api/booking/${bookingId}/payment`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
                     phoneNumber: formattedNumber,
                     amount,
-                    bookingId
+                  })
                 })
 
-                //Handle successful STK push 
-                if(paymentResponse.ResponseCode === '0') {
-                    // prompt user to enter M-Pesa PIN on their phone
-                    alert('Please complete the payment on your mobile phone')
-                    onPaymentSuccess()
-                } else {
-                    setError('Payment initiation failed. Please try again.')
+                const data = await response.json().catch(() => null)
+
+                if (!response.ok) {
+                  throw new Error(data?.error || 'Payment initiation failed. Please try again.')
                 }
+
+                alert('Please complete the payment on your mobile phone')
+                onPaymentSuccess()
             } catch (err) {
-                setError('An error occurred during payment. Please try again')
+                setError(err instanceof Error ? err.message : 'An error occurred during payment. Please try again')
             } finally {
                 setIsProcessing(false)
             }
     }
 
     return (
-        <div className="fixed insert-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
             <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 p-6 relative">
                 <button 
                   onClick={onClose}

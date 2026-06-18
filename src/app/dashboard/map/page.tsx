@@ -33,33 +33,31 @@ interface TailorMapData {
   services: string[]
   totalReviews: number
   completionRate: number
+  verificationStatus?: 'UNVERIFIED' | 'PENDING' | 'VERIFIED' | 'REJECTED'
+  portfolioApproved?: boolean
 }
 
 export default function MapPage() {
   const [tailors, setTailors] = useState<TailorMapData[]>([])
   const [selectedTailor, setSelectedTailor] = useState<TailorMapData | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [showVerifiedOnly, setShowVerifiedOnly] = useState(false)
 
   useEffect(() => {
     async function fetchTailors() {
       try {
-        console.log('Fetching tailors...');
         const response = await fetch('/api/tailor/map')
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         const data = await response.json()
-        console.log('Raw API response:', data)
         
         if (Array.isArray(data) && data.length > 0) {
-          console.log(`Found ${data.length} tailors`);
           setTailors(data)
         } else {
-          console.warn('No tailors found or invalid data format:', data)
           setError('No tailors found in your area')
         }
-      } catch (error) {
-        console.error('Error fetching tailors:', error)
+      } catch {
         setError('Failed to load tailors')
       }
     }
@@ -70,11 +68,25 @@ export default function MapPage() {
     return '★'.repeat(Math.round(rating)) + '☆'.repeat(5 - Math.round(rating))
   }
 
+  const visibleTailors = showVerifiedOnly
+    ? tailors.filter((tailor) => tailor.verificationStatus === 'VERIFIED')
+    : tailors
+
   return (
     <div className="relative min-h-screen">
       <div className="absolute top-0 left-0 right-0 z-10 bg-white/80 backdrop-blur-sm">
         <div className="container mx-auto p-4">
           <h1 className="text-2xl font-bold mb-4">Find Tailors Near You</h1>
+          <div className="mb-4 flex items-center gap-3">
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+              <input
+                type="checkbox"
+                checked={showVerifiedOnly}
+                onChange={() => setShowVerifiedOnly((value) => !value)}
+              />
+              Show verified tailors only
+            </label>
+          </div>
           {error && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
               {error}
@@ -84,7 +96,7 @@ export default function MapPage() {
       </div>
       <div className="h-screen">
         <MapComponent
-          tailors={tailors}
+          tailors={visibleTailors}
           selectedTailor={selectedTailor}
           setSelectedTailor={setSelectedTailor}
           renderStars={renderStars}

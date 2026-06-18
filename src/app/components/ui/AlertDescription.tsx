@@ -1,7 +1,7 @@
 import React from 'react';
 
 interface AlertDescriptionProps {
-    children: React. ReactNode;
+    children: React.ReactNode;
 }
 
 const AlertDescription: React.FC<AlertDescriptionProps> = ({ children }) => {

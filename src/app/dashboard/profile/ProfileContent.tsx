@@ -10,23 +10,7 @@ import {
   Trash2
 } from 'lucide-react'
 import AvailabilityCalendar from '@/app/components/AvailabilityCalendar'
-
-interface Service {
-  id?: string
-  name: string
-  description: string
-  price: number
-}
-
-interface TailorProfile {
-  id?: string
-  specialty?: string
-  bio?: string
-  location?: string
-  services?: Service[]
-  availabilityStatus?: 'open' | 'limited' | 'closed'
-  unavailableDates?: string[]
-}
+import type { Service, TailorProfile } from './page'
 
 interface ProfileContentProps {
   profile: TailorProfile
@@ -172,6 +156,84 @@ export default function ProfileContent({
             </p>
           )}
         </div>
+
+        <div className="bg-white rounded-2xl shadow-lg p-6">
+          <div className="flex items-center border-b pb-4 mb-4">
+            <User className="w-6 h-6 text-indigo-600 mr-3" />
+            <h2 className="text-2xl font-semibold text-gray-800">Verification</h2>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-gray-700 font-medium mb-2">Business Name</label>
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={profile.businessName || ''}
+                  onChange={(e) => setProfile(prev => ({ ...prev, businessName: e.target.value }))}
+                  className="w-full rounded-xl"
+                  placeholder="Studio or business name"
+                />
+              ) : (
+                <p className="bg-gray-100 p-3 rounded-xl text-gray-700">
+                  {profile.businessName || 'Not provided'}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-gray-700 font-medium mb-2">Years of Experience</label>
+              {isEditing ? (
+                <input
+                  type="number"
+                  min="0"
+                  value={profile.yearsOfExperience ?? ''}
+                  onChange={(e) => setProfile(prev => ({ ...prev, yearsOfExperience: e.target.value ? Number(e.target.value) : undefined }))}
+                  className="w-full rounded-xl"
+                  placeholder="Years in tailoring"
+                />
+              ) : (
+                <p className="bg-gray-100 p-3 rounded-xl text-gray-700">
+                  {typeof profile.yearsOfExperience === 'number' ? `${profile.yearsOfExperience} years` : 'Not provided'}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-gray-700 font-medium mb-2">Identity Document URL</label>
+              {isEditing ? (
+                <input
+                  type="url"
+                  value={profile.identityDocumentUrl || ''}
+                  onChange={(e) => setProfile(prev => ({ ...prev, identityDocumentUrl: e.target.value }))}
+                  className="w-full rounded-xl"
+                  placeholder="Link to identification or business proof"
+                />
+              ) : (
+                <p className="bg-gray-100 p-3 rounded-xl text-gray-700 break-all">
+                  {profile.identityDocumentUrl || 'Not provided'}
+                </p>
+              )}
+            </div>
+
+            <div className="rounded-xl bg-indigo-50 p-4 text-sm text-indigo-800">
+              <p className="font-semibold">Verification Status: {profile.verificationStatus || 'UNVERIFIED'}</p>
+              {profile.verificationNotes && (
+                <p className="mt-2">Review Notes: {profile.verificationNotes}</p>
+              )}
+            </div>
+
+            {isEditing && profile.verificationStatus !== 'VERIFIED' && (
+              <button
+                type="button"
+                onClick={() => setProfile(prev => ({ ...prev, verificationStatus: 'PENDING' }))}
+                className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+              >
+                Submit for Verification
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Location and Availability Section */}
@@ -237,10 +299,7 @@ export default function ProfileContent({
           )}
 
           {/* Optional: Availability Calendar */}
-          {!isEditing && profile.id && <AvailabilityCalendar 
-            tailorId={profile.id} 
-            initialSelectedDates={profile.unavailableDates ? profile.unavailableDates.map(date => new Date(date)) : []} 
-          />}
+          {!isEditing && profile.id && <AvailabilityCalendar tailorId={profile.id} />}
         </div>
       </div>
     </div>

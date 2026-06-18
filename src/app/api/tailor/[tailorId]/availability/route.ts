@@ -3,13 +3,14 @@ import { prisma } from '@/lib/prisma'
 
 export async function GET(
   request: Request,
-  { params }: { params: { tailorId: string } }
+  context: { params: Promise<{ tailorId: string }> }
 ) {
   try {
+    const { tailorId } = await context.params
     // Get all availabilities for the tailor
     const availabilities = await prisma.availability.findMany({
       where: {
-        tailorId: params.tailorId,
+        tailorId,
         date: {
           gte: new Date() // Only future availabilities
         },

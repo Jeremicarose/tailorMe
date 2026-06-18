@@ -6,14 +6,16 @@ interface ProfileHeaderProps {
     isEditing: boolean
     setIsEditing: (editing: boolean) => void
     handleSave: () => void
-    isSaving: boolean;
+    isSaving: boolean
+    verificationStatus?: 'UNVERIFIED' | 'PENDING' | 'VERIFIED' | 'REJECTED'
 }
 
 export default function ProfileHeader ({
     isEditing,
     setIsEditing,
     handleSave,
-    isSaving
+    isSaving,
+    verificationStatus
 }: ProfileHeaderProps) {
     return (
         <div className="bg-white shadow-2xl rounded-3xl overflow-hidden border-gray-100">
@@ -25,6 +27,11 @@ export default function ProfileHeader ({
                     <div>
                         <h1 className="text-3xl font-bold tracking-tight">Professional Profile</h1>
                         <p className="text-white/80 mt-2">Showcase your tailoring expertise</p>
+                        {verificationStatus && (
+                            <span className="mt-3 inline-flex rounded-full bg-white/20 px-3 py-1 text-xs font-semibold text-white">
+                                Verification: {verificationStatus}
+                            </span>
+                        )}
                     </div>
                 </div>
 

@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
+const path = require('path')
+
 const nextConfig = {
+  outputFileTracingRoot: path.join(__dirname),
   images: {
     domains: [
       'via.placeholder.com',
@@ -7,11 +10,10 @@ const nextConfig = {
       'picsum.photos'
     ]
   },
-  typescript: {
-    ignoreBuildErrors: true
-  },
   webpack: (config, { isServer }) => {
-    config.resolve.fallback = { fs: false, net: false, tls: false};
+    if (!isServer) {
+      config.resolve.fallback = { fs: false, net: false, tls: false };
+    }
     return config;
   },
   async headers() {

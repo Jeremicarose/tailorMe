@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { redirect } from 'next/navigation'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import Alert from '@/app/components/ui/Alert'
+import AlertDescription from '@/app/components/ui/AlertDescription'
 import ProfileHeader from './ProfileHeader'
 import ProfileContent from './ProfileContent'
 
@@ -21,9 +22,17 @@ export interface TailorProfile {
   location?: string
   services?: Service[]
   availabilityStatus?: 'open' | 'limited' | 'closed'
+  verificationStatus?: 'UNVERIFIED' | 'PENDING' | 'VERIFIED' | 'REJECTED'
+  verificationSubmittedAt?: string
+  verificationReviewedAt?: string
+  verificationNotes?: string
+  identityDocumentUrl?: string
+  businessName?: string
+  yearsOfExperience?: number
+  portfolioApproved?: boolean
   maxDailyBookings?: number
   bookingNoticePeriod?: string
-  unavailableDates?: Date[]
+  unavailableDates?: string[]
   phoneNumber?: string
   profileImage?: string
 }
@@ -49,25 +58,13 @@ export default function TailorProfilePage() {
     location: '',
     services: [],
     availabilityStatus: 'open',
+    verificationStatus: 'UNVERIFIED',
     maxDailyBookings: 10,
     bookingNoticePeriod: '24h',
     unavailableDates: []
   }
 
   const [profile, setProfile] = useState<TailorProfile>(initialProfile)
-
-  // Redirect non-tailors
-  useEffect(() => {
-    if (status === 'authenticated' && session?.user?.role !== 'TAILOR') {
-      redirect('/dashboard')
-    }
-  }, [status, session])
-
-  useEffect(() => {
-    if (session?.user?.id) {
-      fetchTailorProfile()
-    }
-  }, [session?.user?.id])
 
   const fetchTailorProfile = async () => {
     try {
@@ -90,7 +87,7 @@ export default function TailorProfilePage() {
       
       const processedProfile: TailorProfile = {
         ...data,
-        unavailableDates: data.unavailableDates?.map((date: string) => new Date(date)) || [],
+        unavailableDates: data.unavailableDates || [],
         availabilityStatus: (data.availabilityStatus?.toLowerCase() as TailorProfile['availabilityStatus']) || 'open',
         services: data.services || [],
         maxDailyBookings: data.maxDailyBookings || 10,
@@ -106,6 +103,19 @@ export default function TailorProfilePage() {
       setIsLoading(false)
     }
   }
+
+  // Redirect non-tailors
+  useEffect(() => {
+    if (status === 'authenticated' && session?.user?.role !== 'TAILOR') {
+      redirect('/dashboard')
+    }
+  }, [status, session])
+
+  useEffect(() => {
+    if (session?.user?.id) {
+      fetchTailorProfile()
+    }
+  }, [session?.user?.id, fetchTailorProfile])
 
   const validateProfile = (profile: TailorProfile): string | null => {
     if (!profile.specialty?.trim()) {
@@ -132,10 +142,7 @@ export default function TailorProfilePage() {
       setError(null)
 
       const profileToSave = {
-        ...profile,
-        unavailableDates: profile.unavailableDates?.map(date => 
-          date instanceof Date ? date.toISOString() : date
-        )
+        ...profile
       }
 
       const response = await fetch('/api/tailor/profile', {
@@ -202,7 +209,7 @@ export default function TailorProfilePage() {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 md:p-8">
       <div className="container mx-auto max-w-5xl space-y-8">
         {error && (
-          <Alert variant="destructive">
+          <Alert variant="error">
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
@@ -212,6 +219,7 @@ export default function TailorProfilePage() {
           setIsEditing={setIsEditing} 
           handleSave={handleSave}
           isSaving={isSaving}
+          verificationStatus={profile.verificationStatus}
         />
         
         <ProfileContent 
@@ -221,7 +229,6 @@ export default function TailorProfilePage() {
           addService={addService}
           removeService={removeService}
           updateService={updateService}
-          disabled={isSaving}
         />
       </div>
     </div>

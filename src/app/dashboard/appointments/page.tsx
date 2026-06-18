@@ -10,7 +10,8 @@ interface Appointment {
   date: string
   time: string
   service: string
-  status: 'PENDING' | 'CONFIRMED' | 'CANCELLED'
+  status: 'PENDING' | 'ACCEPTED' | 'IN_PROGRESS' | 'READY_FOR_FITTING' | 'CANCELLED'
+  paymentStatus: 'UNPAID' | 'INITIATED' | 'PAID' | 'FAILED' | 'CANCELLED'
 }
 
 export default function UpcomingAppointments() {
@@ -34,7 +35,7 @@ export default function UpcomingAppointments() {
     fetchAppointments()
   }, [])
 
-  const handleUpdateAppointmentStatus = async (id: string, status: 'CONFIRMED' | 'CANCELLED') => {
+  const handleUpdateAppointmentStatus = async (id: string, status: 'ACCEPTED' | 'CANCELLED') => {
     try {
       const response = await fetch(`/api/tailor/appointments/${id}`, {
         method: 'PATCH',
@@ -119,13 +120,19 @@ export default function UpcomingAppointments() {
                           <Scissors className="w-4 h-4" />
                           <span>{appointment.service}</span>
                         </div>
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <span className="font-medium">Payment:</span>
+                          <span>{appointment.paymentStatus}</span>
+                        </div>
                       </div>
                     </div>
 
                     <div className="flex flex-col items-end gap-4">
                       <span className={`px-4 py-2 rounded-full text-sm font-semibold
                         ${appointment.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' : 
-                          appointment.status === 'CONFIRMED' ? 'bg-emerald-100 text-emerald-800' : 
+                          appointment.status === 'ACCEPTED' ? 'bg-emerald-100 text-emerald-800' : 
+                          appointment.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-800' :
+                          appointment.status === 'READY_FOR_FITTING' ? 'bg-purple-100 text-purple-800' :
                           'bg-red-100 text-red-800'}`}>
                         {appointment.status}
                       </span>
@@ -133,7 +140,7 @@ export default function UpcomingAppointments() {
                       {appointment.status === 'PENDING' && (
                         <div className="flex gap-2">
                           <button
-                            onClick={() => handleUpdateAppointmentStatus(appointment.id, 'CONFIRMED')}
+                            onClick={() => handleUpdateAppointmentStatus(appointment.id, 'ACCEPTED')}
                             className="px-4 py-2 bg-emerald-500 text-white rounded-md hover:bg-emerald-600 transition-colors"
                           >
                             Confirm
@@ -157,4 +164,3 @@ export default function UpcomingAppointments() {
     </div>
   )
 }
-

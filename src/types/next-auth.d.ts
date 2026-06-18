@@ -17,10 +17,10 @@ declare module "next-auth" {
                 description?: string | null
                 price: number
             }[]
-            availability?: string | null
+            availabilityStatus?: string | null
             maxDailyBookings?: number | null
             bookingNoticePeriod?: string | null
-            unavailableDates?: string | null
+            unavailableDates?: string[] | null
         }
     }
 
@@ -43,7 +43,7 @@ declare module "next-auth" {
                 availabilityStatus?: string | null
                 maxDailyBookings?: number | null
                 bookingNoticePeriod?: string | null
-                unavailableDates?: string | null
+                unavailableDates?: string[] | null
             }
         }
     }
@@ -68,7 +68,7 @@ declare module "next-auth/jwt" {
             availabilityStatus?: string | null
             maxDailyBookings?: number | null
             bookingNoticePeriod?: string | null
-            unavailableDates?: string | null
+            unavailableDates?: string[] | null
         }
     }
 }

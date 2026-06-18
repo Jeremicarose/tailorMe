@@ -1,9 +1,121 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
-import { Prisma } from "@prisma/client"
+import { AvailabilityStatus, Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { authOptions } from '@/app/api/auth/[...nextauth]/route'
+import { authOptions } from '@/lib/auth'
 import { Session } from 'next-auth'
+
+function parseStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === 'string')
+  }
+
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value) as unknown
+      return Array.isArray(parsed)
+        ? parsed.filter((item): item is string => typeof item === 'string')
+        : []
+    } catch {
+      return []
+    }
+  }
+
+  return []
+}
+
+function normalizeAvailabilityStatus(value: unknown): AvailabilityStatus | undefined {
+  if (typeof value !== 'string') {
+    return undefined
+  }
+
+  const normalized = value.toUpperCase()
+  if (normalized === 'OPEN' || normalized === 'LIMITED' || normalized === 'CLOSED') {
+    return normalized as AvailabilityStatus
+  }
+
+  return undefined
+}
+
+function normalizeVerificationStatus(value: unknown): TailorVerificationStatus | undefined {
+  if (typeof value !== 'string') {
+    return undefined
+  }
+
+  const normalized = value.toUpperCase()
+  if (
+    normalized === 'UNVERIFIED' ||
+    normalized === 'PENDING' ||
+    normalized === 'VERIFIED' ||
+    normalized === 'REJECTED'
+  ) {
+    return normalized as TailorVerificationStatus
+  }
+
+  return undefined
+}
+
+type TailorVerificationStatus = 'UNVERIFIED' | 'PENDING' | 'VERIFIED' | 'REJECTED'
+
+function serializeTailorProfile(
+  tailorProfile: {
+    id: string
+    userId: string
+    specialty: string | null
+    bio: string | null
+    location: string | null
+    availability: AvailabilityStatus | null
+    verificationStatus: TailorVerificationStatus
+    verificationSubmittedAt: Date | null
+    verificationReviewedAt: Date | null
+    verificationNotes: string | null
+    identityDocumentUrl: string | null
+    businessName: string | null
+    yearsOfExperience: number | null
+    portfolioApproved: boolean
+    maxDailyBookings: number
+    bookingNoticePeriod: string
+    unavailableDates: Prisma.JsonValue | null
+    services: {
+      id: string
+      name: string
+      description: string | null
+      price: number
+      tailorId: string
+      createdAt: Date
+      updatedAt: Date
+    }[]
+    user: {
+      phoneNumber: string | null
+      image: string | null
+      name?: string | null
+      email?: string | null
+    }
+  }
+) {
+  return {
+    id: tailorProfile.id,
+    userId: tailorProfile.userId,
+    specialty: tailorProfile.specialty,
+    bio: tailorProfile.bio,
+    location: tailorProfile.location,
+    availabilityStatus: tailorProfile.availability ?? 'OPEN',
+    verificationStatus: tailorProfile.verificationStatus,
+    verificationSubmittedAt: tailorProfile.verificationSubmittedAt,
+    verificationReviewedAt: tailorProfile.verificationReviewedAt,
+    verificationNotes: tailorProfile.verificationNotes,
+    identityDocumentUrl: tailorProfile.identityDocumentUrl,
+    businessName: tailorProfile.businessName,
+    yearsOfExperience: tailorProfile.yearsOfExperience,
+    portfolioApproved: tailorProfile.portfolioApproved,
+    maxDailyBookings: tailorProfile.maxDailyBookings,
+    bookingNoticePeriod: tailorProfile.bookingNoticePeriod,
+    unavailableDates: parseStringArray(tailorProfile.unavailableDates),
+    services: tailorProfile.services,
+    phoneNumber: tailorProfile.user.phoneNumber,
+    profileImage: tailorProfile.user.image,
+  }
+}
 
 // GET: Retrieve tailor profile
 export async function GET(request: Request) {
@@ -16,13 +128,10 @@ export async function GET(request: Request) {
 
     // Find the user
     const user = await prisma.user.findUnique({
-      where: { 
-        email: session.user.email,
-        role: 'TAILOR' 
-      }
+      where: { email: session.user.email }
     })
 
-    if (!user) {
+    if (!user || user.role !== 'TAILOR') {
       return NextResponse.json({ error: 'Not a tailor' }, { status: 403 })
     }
 
@@ -45,20 +154,7 @@ export async function GET(request: Request) {
     }
 
     // Return the tailor profile
-    return NextResponse.json({
-      id: tailorProfile.id,
-      userId: tailorProfile.userId,
-      specialty: tailorProfile.specialty,
-      bio: tailorProfile.bio,
-      location: tailorProfile.location,
-      availabilityStatus: tailorProfile.availabilityStatus,
-      maxDailyBookings: tailorProfile.maxDailyBookings,
-      bookingNoticePeriod: tailorProfile.bookingNoticePeriod,
-      unavailableDates: tailorProfile.unavailableDates ? JSON.parse(tailorProfile.unavailableDates) : [],
-      services: tailorProfile.services,
-      phoneNumber: tailorProfile.user.phoneNumber,
-      profileImage: tailorProfile.user.image
-    })
+    return NextResponse.json(serializeTailorProfile(tailorProfile))
   } catch (error) {
     console.error('Error fetching tailor profile:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -76,13 +172,10 @@ export async function POST(request: Request) {
 
     // Find the tailor
     const user = await prisma.user.findUnique({
-      where: { 
-        email: session.user.email,
-        role: 'TAILOR' 
-      }
+      where: { email: session.user.email }
     })
 
-    if (!user) {
+    if (!user || user.role !== 'TAILOR') {
       return NextResponse.json({ error: 'Not a tailor' }, { status: 403 })
     }
 
@@ -103,54 +196,84 @@ export async function POST(request: Request) {
     }
 
     // Parse the request body
-    const { 
-      specialty, 
-      bio, 
-      location, 
-      services, 
-      availabilityStatus, 
-      maxDailyBookings, 
-      bookingNoticePeriod, 
+    const body = await request.json()
+    const {
+      specialty,
+      bio,
+      location,
+      services,
+      availabilityStatus,
+      maxDailyBookings,
+      bookingNoticePeriod,
       unavailableDates,
       phoneNumber,
-      profileImage
-    } = await request.json()
+      profileImage,
+      businessName,
+      yearsOfExperience,
+      identityDocumentUrl,
+      verificationStatus,
+      verificationNotes
+    } = body as Record<string, unknown>
 
     // Update user profile if phone number or profile image is provided
-    if (phoneNumber || profileImage) {
+    if (typeof phoneNumber === 'string' || typeof profileImage === 'string') {
       await prisma.user.update({
         where: { id: user.id },
         data: {
-          ...(phoneNumber && { phoneNumber }),
-          ...(profileImage && { image: profileImage })
+          ...(typeof phoneNumber === 'string' ? { phoneNumber } : {}),
+          ...(typeof profileImage === 'string' ? { image: profileImage } : {})
         }
       })
     }
 
     // Prepare update data
     const updateData: Prisma.TailorUpdateInput = {
-      specialty,
-      bio,
-      location,
-      // Remove direct availability assignment
-      ...(maxDailyBookings !== undefined && { maxDailyBookings }),
-      ...(bookingNoticePeriod !== undefined && { bookingNoticePeriod }),
-      unavailableDates: unavailableDates ? JSON.stringify(unavailableDates) : null,
-      services: {
-        // Delete existing services
-        deleteMany: {},
-        // Create new services
-        create: services?.map((service: any) => ({
-          name: service.name,
-          description: service.description ?? null,
-          price: service.price ? String(service.price) : null
-        })) || []
+      ...(typeof specialty === 'string' ? { specialty: specialty.trim() || null } : {}),
+      ...(typeof bio === 'string' ? { bio: bio.trim() || null } : {}),
+      ...(typeof location === 'string' ? { location: location.trim() || null } : {}),
+      ...(typeof maxDailyBookings === 'number' ? { maxDailyBookings } : {}),
+      ...(typeof bookingNoticePeriod === 'string' ? { bookingNoticePeriod } : {}),
+      ...(typeof businessName === 'string' ? { businessName: businessName.trim() || null } : {}),
+      ...(typeof yearsOfExperience === 'number' ? { yearsOfExperience } : {}),
+      ...(typeof identityDocumentUrl === 'string' ? { identityDocumentUrl: identityDocumentUrl.trim() || null } : {}),
+      ...(typeof verificationNotes === 'string' ? { verificationNotes } : {}),
+      ...(unavailableDates !== undefined ? { unavailableDates: parseStringArray(unavailableDates) } : {}),
+    }
+
+    const normalizedAvailabilityStatus = normalizeAvailabilityStatus(availabilityStatus)
+    if (normalizedAvailabilityStatus) {
+      updateData.availability = normalizedAvailabilityStatus
+    }
+
+    const normalizedVerificationStatus = normalizeVerificationStatus(verificationStatus)
+    if (normalizedVerificationStatus) {
+      updateData.verificationStatus = normalizedVerificationStatus
+      if (normalizedVerificationStatus === 'PENDING') {
+        updateData.verificationSubmittedAt = new Date()
       }
     }
 
-    // Conditionally add availabilityStatus if it's provided
-    if (availabilityStatus) {
-      updateData.availabilityStatus = availabilityStatus.toUpperCase() as Prisma.EnumAvailabilityStatusFieldUpdateOperationsInput
+    if (Array.isArray(services)) {
+      updateData.services = {
+        deleteMany: {},
+        create: services.flatMap((service) => {
+          if (!service || typeof service !== 'object') {
+            return []
+          }
+
+          const value = service as Record<string, unknown>
+          const price = Number(value.price)
+          if (typeof value.name !== 'string' || !value.name.trim() || Number.isNaN(price)) {
+            return []
+          }
+
+          return [{
+            name: value.name.trim(),
+            description: typeof value.description === 'string' ? value.description : null,
+            price,
+          }]
+        })
+      }
     }
 
     // Update tailor profile
@@ -163,33 +286,7 @@ export async function POST(request: Request) {
       }
     })
 
-    console.log('Updated Tailor Profile:', {
-      id: updatedProfile.id,
-      specialty: updatedProfile.specialty,
-      availabilityStatus: updatedProfile.availabilityStatus,
-      services: updatedProfile.services
-    })
-
-    // Prepare response
-    return NextResponse.json({
-      id: updatedProfile.id,
-      specialty: updatedProfile.specialty,
-      bio: updatedProfile.bio,
-      location: updatedProfile.location,
-      services: updatedProfile.services,
-      availabilityStatus: updatedProfile.availabilityStatus,
-      maxDailyBookings: updatedProfile.maxDailyBookings,
-      bookingNoticePeriod: updatedProfile.bookingNoticePeriod,
-      unavailableDates: updatedProfile.unavailableDates ? 
-        JSON.parse(updatedProfile.unavailableDates) : 
-        [],
-      user: {
-        name: updatedProfile.user.name,
-        email: updatedProfile.user.email,
-        phoneNumber: updatedProfile.user.phoneNumber,
-        image: updatedProfile.user.image
-      }
-    })
+    return NextResponse.json(serializeTailorProfile(updatedProfile))
   } catch (error) {
     console.error('Profile update error:', error)
     return NextResponse.json({ 

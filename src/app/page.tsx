@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { 
   FaSearch, 
   FaCalendarCheck, 
@@ -13,6 +14,15 @@ import { MapPin, Clock, Star, Scissors, Calendar } from "lucide-react";
 import { motion } from 'framer-motion'
 
 export default function Home() {
+  const router = useRouter();
+
+  const handleTailorClick = () => {
+    router.push('/dashboard/profile');
+  };
+
+  const handleCustomerClick = () => {
+    router.push('/dashboard/map');
+  };
   return (
     <div className="min-h-screen bg-white">
       {/* Hero Section with AI-Inspired Design */}
@@ -33,19 +43,19 @@ export default function Home() {
                 Connect with expert tailors who bring your vision to life with precision and personalization.
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
-                <Link 
-                  href="/tailors" 
+                <button
+                  onClick={handleCustomerClick}
                   className="bg-orange-500 text-white px-8 py-4 rounded-full text-lg font-semibold hover:bg-orange-600 transition-all flex items-center justify-center group shadow-lg hover:shadow-xl"
                 >
                   Find Your Tailor
                   <FaArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
-                </Link>
-                <Link 
-                  href="/how-it-works" 
+                </button>
+                <button 
+                  onClick={handleTailorClick} 
                   className="border border-gray-300 text-gray-800 px-8 py-4 rounded-full text-lg font-semibold hover:bg-gray-100 transition-all flex items-center justify-center"
                 >
-                  I'm a Tailor
-                </Link>
+                  I&apos;m a Tailor
+                </button>
               </div>
             </motion.div>
             <motion.div

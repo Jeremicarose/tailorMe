@@ -1,6 +1,6 @@
 'use client'
 
-import React, {useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
     Clock,
@@ -23,6 +23,7 @@ import {
 interface Order {
     id: string
     status: 'completed' | 'in-progress' | 'pending' | 'cancelled'
+    paymentStatus: 'UNPAID' | 'INITIATED' | 'PAID' | 'FAILED' | 'CANCELLED'
     date: string
     estimatedCompletionTime?: string
     customerName?: string
@@ -39,7 +40,15 @@ const statusConfig = {
     'cancelled': { color: 'bg-red-100 text-red-800', icon: AlertCircle }
 }
 
-const Orders: React.FC = () =>{
+const paymentStatusConfig = {
+    UNPAID: 'bg-slate-100 text-slate-700',
+    INITIATED: 'bg-amber-100 text-amber-800',
+    PAID: 'bg-emerald-100 text-emerald-800',
+    FAILED: 'bg-red-100 text-red-800',
+    CANCELLED: 'bg-slate-200 text-slate-700'
+} as const
+
+const Orders: React.FC = () => {
     const [orders, setOrders] = useState<Order[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
@@ -54,54 +63,80 @@ const Orders: React.FC = () =>{
     const [isRefreshing, setIsRefreshing] = useState(false)
 
     const fetchOrders = async (refresh = false) => {
-        if (refresh) setIsRefreshing(true)
-            try {
-               setError(null)
+        if (refresh) {
+            setIsRefreshing(true)
+        }
 
-               // Build query parameters
-               const params = new URLSearchParams({
-                page: page.toString(),
-                size: pageSize.toString(),
-                sort: sortBy,
-                direction: sortDirection
-               })
+        try {
+            setError(null)
 
-               if (filter !== 'all') params.append('status', filter)
-                if(searchQuery) params.append('search', searchQuery)
+            const response = await fetch('/api/booking')
 
-                const response = await fetch(`/api/orders?${params.toString()}`)
-
-                if (!response.ok) {
-                    throw new Error(`Error ${response.status}: ${response.statusText}`)
-                }
-
-                const data = await response.json()
-                setOrders(data.orders)
-                setTotalPages(data.totalPages || 1)
-            } catch (err: any) {
-                setError(err.message || 'Failed to fetch orders')
-            } finally {
-                setLoading(false)
-                setIsRefreshing(false)
+            if (!response.ok) {
+                throw new Error(`Error ${response.status}: ${response.statusText}`)
             }
+
+            const bookings = await response.json()
+            const normalizedOrders: Order[] = Array.isArray(bookings)
+                ? bookings.map((booking: any) => ({
+                    id: booking.id,
+                    status:
+                        booking.status === 'COMPLETED' ? 'completed' :
+                        booking.status === 'IN_PROGRESS' ? 'in-progress' :
+                        booking.status === 'CANCELLED' || booking.status === 'REJECTED' ? 'cancelled' :
+                        'pending',
+                    date: booking.createdAt,
+                    estimatedCompletionTime: booking.requestedDeliveryDate,
+                    customerName: booking.tailor?.user?.name || 'Tailor',
+                    service: booking.description || 'Tailoring Service',
+                    price: typeof booking.measurements?.estimatedPrice === 'number' ? booking.measurements.estimatedPrice : undefined,
+                    notes: booking.notes || undefined,
+                    paymentStatus: booking.paymentStatus ?? 'UNPAID',
+                }))
+                : []
+
+            const filteredOrders = normalizedOrders
+                .filter((order) => filter === 'all' || order.status === filter)
+                .filter((order) => {
+                    if (!searchQuery) {
+                        return true
+                    }
+                    const query = searchQuery.toLowerCase()
+                    return (
+                        order.customerName?.toLowerCase().includes(query) ||
+                        order.service?.toLowerCase().includes(query) ||
+                        order.id.toLowerCase().includes(query)
+                    )
+                })
+                .sort((left, right) => {
+                    if (sortBy === 'status') {
+                        return sortDirection === 'asc'
+                            ? left.status.localeCompare(right.status)
+                            : right.status.localeCompare(left.status)
+                    }
+
+                    const leftDate = new Date(left.date).getTime()
+                    const rightDate = new Date(right.date).getTime()
+                    return sortDirection === 'asc' ? leftDate - rightDate : rightDate - leftDate
+                })
+
+            const computedTotalPages = Math.max(1, Math.ceil(filteredOrders.length / pageSize))
+            const startIndex = (page - 1) * pageSize
+            const pagedOrders = filteredOrders.slice(startIndex, startIndex + pageSize)
+
+            setOrders(pagedOrders)
+            setTotalPages(computedTotalPages)
+        } catch (err: any) {
+            setError(err.message || 'Failed to fetch orders')
+        } finally {
+            setLoading(false)
+            setIsRefreshing(false)
+        }
     }
 
     useEffect(() => {
         fetchOrders()
-    }, [page, pageSize, filter, sortBy, sortDirection])
-
-    // Debounced search
-    useEffect(() => {
-        const handler = setTimeout(() => {
-            if (searchQuery !== undefined) {
-                fetchOrders()
-            }
-        }, 500)
-
-        return () => {
-            clearTimeout(handler)
-        }
-    }, [searchQuery])
+    }, [page, pageSize, filter, sortBy, sortDirection, searchQuery])
 
     const handSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
         setSearchQuery(e.target.value)
@@ -286,6 +321,9 @@ const Orders: React.FC = () =>{
                                         <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider py-3 px-4">
                                             Status
                                         </th>
+                                        <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider py-3 px-4">
+                                            Payment
+                                        </th>
                                         <th className="text-right text-xs font-medium text-slate-500 uppercase tracking-wider py-3 px-4">
                                             Price
                                         </th>
@@ -321,6 +359,11 @@ const Orders: React.FC = () =>{
                                                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusConfig[order.status].color}`}>
                                                             <StatusIcon className="h-3 w-3 mr-1" />
                                                             {order.status.charAt(0).toUpperCase() + order.status.slice(1).replace('-', ' ')}
+                                                        </span>
+                                                    </td>
+                                                    <td className="py-4 px-4">
+                                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${paymentStatusConfig[order.paymentStatus]}`}>
+                                                            {order.paymentStatus}
                                                         </span>
                                                     </td>
                                                     <td className="py-4 px-4 text-sm font-medium text-slate-700 text-right">
@@ -374,6 +417,9 @@ const Orders: React.FC = () =>{
                                                     
                                                     <p className="text-sm text-slate-500 mb-1">Price</p>
                                                     <p className="text-sm font-medium mb-3">{order.price ? `$${order.price.toFixed(2)}` : 'N/A'}</p>
+
+                                                    <p className="text-sm text-slate-500 mb-1">Payment Status</p>
+                                                    <p className="text-sm font-medium mb-3">{order.paymentStatus}</p>
                                                 </div>
                                             </div>
                                             {order.notes && (

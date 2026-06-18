@@ -16,11 +16,12 @@ const TailorProfileSchema = z.object({
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: {tailorId: string} }
+  context: { params: Promise<{ tailorId: string }> }
 ) {
     try{
+       const { tailorId } = await context.params
        const tailorDetails = await prisma.tailor.findUnique({
-        where: { userId: params.tailorId},
+        where: { id: tailorId},
         include: {
           user: true,
           services: true,
@@ -35,10 +36,13 @@ export async function GET(
             },
             take: 5
           },
-          availability: {
+          availabilities: {
             where: {
               status: 'AVAILABLE',
               date: { gte: new Date()}
+            },
+            orderBy: {
+              date: 'asc'
             }
           }
         }
@@ -57,9 +61,14 @@ export async function GET(
         distance: 0,
         specialty: tailorDetails.specialty || 'General Tailoring',
         bio: tailorDetails.bio || 'No bio available',
-        services: tailorDetails.services || [],
+        services: tailorDetails.services.map(service => service.name),
         completionRate: tailorDetails.completionRate || 0,
-        availability: tailorDetails.availability.map(avail =>
+        verificationStatus: tailorDetails.verificationStatus,
+        verificationNotes: tailorDetails.verificationNotes,
+        businessName: tailorDetails.businessName,
+        yearsOfExperience: tailorDetails.yearsOfExperience,
+        portfolioApproved: tailorDetails.portfolioApproved,
+        availability: tailorDetails.availabilities.map(avail =>
           `${avail.startTime.toLocaleString()} - ${avail.endTime.toLocaleString()}`
         ) || [],
 
@@ -73,16 +82,17 @@ export async function GET(
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { tailorId: string}}
+  context: { params: Promise<{ tailorId: string }> }
 ) {
   try {
+    const { tailorId } = await context.params
     // parse and validate request body
     const body = await request.json()
     const validatedData = TailorProfileSchema.parse(body)
 
     // update User profile
     const updatedUser = await prisma.user.update({
-      where: { id: params.tailorId },
+      where: { id: tailorId },
       data: {
         ...(validatedData.name && { name: validatedData.name }),
         ...(validatedData.phoneNumber && { phoneNumber: validatedData.phoneNumber }),
@@ -92,7 +102,7 @@ export async function PATCH(
 
     // Update of Create Tailor profile
     const updatedTailor = await prisma.tailor.upsert({
-      where: { userId: params.tailorId },
+      where: { userId: tailorId },
       update: {
         specialty: validatedData.speciality,
         bio: validatedData.bio,
@@ -101,7 +111,7 @@ export async function PATCH(
         longitude: validatedData.longitude
       },
       create: {
-        userId: params.tailorId,
+        userId: tailorId,
         specialty: validatedData.speciality,
         bio: validatedData.bio,
         location: validatedData.location,

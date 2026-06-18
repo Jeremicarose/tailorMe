@@ -6,6 +6,25 @@ import bcrypt from "bcryptjs";
 import { UserRole } from "@prisma/client";
 import type { User } from "@/types/user";
 
+function normalizeUnavailableDates(value: unknown): string[] | null {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === "string");
+  }
+
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return Array.isArray(parsed)
+        ? parsed.filter((item): item is string => typeof item === "string")
+        : null;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
 // Authentication utility functions
 export const authUtils = {
   // Hash password securely
@@ -104,16 +123,13 @@ export const authOptions: NextAuthOptions = {
                 description: service.description,
                 price: service.price
               })),
-              availabilityStatus: user.tailorProfile.availabilityStatus,
+              availabilityStatus: user.tailorProfile.availability ?? undefined,
               maxDailyBookings: user.tailorProfile.maxDailyBookings,
               bookingNoticePeriod: user.tailorProfile.bookingNoticePeriod,
-              unavailableDates: user.tailorProfile.unavailableDates 
-                ? JSON.parse(user.tailorProfile.unavailableDates) 
-                : null
+              unavailableDates: normalizeUnavailableDates(user.tailorProfile.unavailableDates)
             } : undefined
           } as User;
-        } catch (error) {
-          console.error("Authentication error:", error);
+        } catch {
           return null;
         }
       }
@@ -163,18 +179,6 @@ export const authOptions: NextAuthOptions = {
     signOut: "/login",
     error: "/login", // Error code passed in query string as ?error=
   },
-
-  // Additional security configurations
-  events: {
-    async signIn(message) {
-      // Optional: Log successful sign-ins
-      console.log('Sign in event', { 
-        user: message.user.email, 
-        time: new Date().toISOString() 
-      });
-    },
-  },
-
   // JWT encryption settings
   jwt: {
     maxAge: 30 * 24 * 60 * 60, // 30 days

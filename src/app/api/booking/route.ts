@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { prisma } from '@/lib/prisma'
+import { authOptions } from '@/lib/auth'
+import { expireStaleInitiatedBookings } from '@/lib/expire-stale-payments'
 
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession()
+    await expireStaleInitiatedBookings()
+    const session = await getServerSession(authOptions)
     
     if (!session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -28,30 +31,39 @@ export async function POST(request: Request) {
       )
     }
 
-    // Check if the availability slot exists and is available
-    const availability = await prisma.availability.findFirst({
-      where: {
-        id: data.availabilityId,
-        status: 'AVAILABLE'
+    const tailor = await prisma.tailor.findUnique({
+      where: { id: data.tailorId },
+      select: {
+        id: true,
+        verificationStatus: true
       }
     })
 
-    if (!availability) {
+    if (!tailor) {
+      return NextResponse.json({ error: 'Tailor not found' }, { status: 404 })
+    }
+
+    if (tailor.verificationStatus !== 'VERIFIED') {
       return NextResponse.json(
-        { error: 'Selected time slot is not available' },
-        { status: 400 }
+        { error: 'This tailor is not yet verified for online booking' },
+        { status: 403 }
       )
     }
 
-    // Create the booking and update availability status in a transaction
     const booking = await prisma.$transaction(async (prisma) => {
-      // Update availability status
-      await prisma.availability.update({
-        where: { id: data.availabilityId },
+      const reservedAvailability = await prisma.availability.updateMany({
+        where: {
+          id: data.availabilityId,
+          tailorId: data.tailorId,
+          status: 'AVAILABLE'
+        },
         data: { status: 'BOOKED' }
       })
 
-      // Create the booking
+      if (reservedAvailability.count === 0) {
+        throw new Error('Selected time slot is not available')
+      }
+
       return prisma.booking.create({
         data: {
           userId: user.id,
@@ -67,6 +79,13 @@ export async function POST(request: Request) {
 
     return NextResponse.json(booking)
   } catch (error) {
+    if (error instanceof Error && error.message === 'Selected time slot is not available') {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 409 }
+      )
+    }
+
     console.error('Error creating booking:', error)
     return NextResponse.json(
       { error: 'Failed to create booking' },
@@ -77,7 +96,8 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   try {
-    const session = await getServerSession()
+    await expireStaleInitiatedBookings()
+    const session = await getServerSession(authOptions)
     
     if (!session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

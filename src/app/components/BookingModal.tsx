@@ -2,9 +2,17 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { FaTimes, FaCalculator } from 'react-icons/fa'
+import { FaTimes } from 'react-icons/fa'
 import MpesaPaymentModal from './MpesaPaymentModal'
-import { BookingDetails } from '../tailors/[tailorId]/page'
+
+export interface BookingDetails {
+  garmentType: string
+  complexity: string
+  estimatedPrice: number
+  requestedDeliveryDate: string
+  service: string
+  description: string
+}
 
 // Pricing data for different garment types and complexities
 const PRICING = {
@@ -33,18 +41,22 @@ const PRICING = {
 interface BookingModalProps {
   tailorName: string
   onClose: () => void
-  onBookAppointment: (bookingDetails: BookingDetails) => Promise<void>
+  onPrepareBooking: (bookingDetails: BookingDetails) => Promise<{ bookingId: string }>
 }
 
-export default function BookingModal({ tailorName, onClose, onBookAppointment }: BookingModalProps) {
+export default function BookingModal({ tailorName, onClose, onPrepareBooking }: BookingModalProps) {
   const [garmentType, setGarmentType] = useState('')
   const [complexity, setComplexity] = useState('')
   const [estimatedPrice, setEstimatedPrice] = useState(0)
-  const [completionDate, setCompletionDate] = useState('')
+  const [completionDateLabel, setCompletionDateLabel] = useState('')
+  const [requestedDeliveryDate, setRequestedDeliveryDate] = useState('')
   const [showEstimate, setShowEstimate] = useState(false)
   const [showMpesaModal, setShowMpesaModal] = useState(false)
   const [showBookingForm, setShowBookingForm] = useState(true)
   const [bookingDetails, setBookingDetails] = useState<BookingDetails | null>(null)
+  const [activeBookingId, setActiveBookingId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [isPreparingBooking, setIsPreparingBooking] = useState(false)
 
   // Garment type options based on pricing data
   const garmentTypes = Object.keys(PRICING)
@@ -75,42 +87,62 @@ export default function BookingModal({ tailorName, onClose, onBookAppointment }:
 
       const completionDate = new Date(today)
       completionDate.setDate(today.getDate() + additionalDays)
-      setCompletionDate(completionDate.toLocaleDateString())
+      setCompletionDateLabel(completionDate.toLocaleDateString())
+      setRequestedDeliveryDate(completionDate.toISOString())
     }
   }, [garmentType, complexity, showEstimate])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
-    // Prepare booking details
+
     const details: BookingDetails = {
       garmentType,
       complexity,
       estimatedPrice,
-      completionDate,
-      time: '', // Add default or derive from context
-      date: '', // Add default or derive from context
+      requestedDeliveryDate,
       service: garmentType,
-      tailorId: '' // Add default or derive from context
+      description: `${garmentType} (${complexity})`
     }
 
     try {
-      await onBookAppointment(details)
-      onClose() // Close modal after successful booking
-    } catch (error) {
-      console.error('Booking failed:', error)
-      // Optionally show an error message to the user
+      setError(null)
+      setIsPreparingBooking(true)
+      const preparedBooking = await onPrepareBooking(details)
+      setActiveBookingId(preparedBooking.bookingId)
+      setBookingDetails(details)
+      setShowBookingForm(false)
+      setShowMpesaModal(true)
+    } catch (prepareError) {
+      setError(prepareError instanceof Error ? prepareError.message : 'Failed to prepare booking')
+    } finally {
+      setIsPreparingBooking(false)
     }
   }
 
-  const handlePaymentSuccess = () => {
-    // Additional logic for successful booking (e.g., send to backend, close modal)
-    console.log('Booking confirmed:', bookingDetails)
-    onClose()
+  const handlePaymentSuccess = async () => {
+    if (!bookingDetails) {
+      return
+    }
+
+    try {
+      setError(null)
+      onClose()
+    } catch (bookingError) {
+      console.error('Booking failed:', bookingError)
+      setError('Payment succeeded, but the booking could not be created. Please try again.')
+      setShowMpesaModal(false)
+      setShowBookingForm(true)
+    }
   }
 
-  const handlePaymentCancel = () => {
-    // Return to booking form
+  const handlePaymentCancel = async () => {
+    if (activeBookingId) {
+      await fetch(`/api/booking/${activeBookingId}/payment`, {
+        method: 'DELETE'
+      }).catch(() => null)
+    }
+
+    setActiveBookingId(null)
     setShowBookingForm(true)
     setShowMpesaModal(false)
   }
@@ -132,6 +164,12 @@ export default function BookingModal({ tailorName, onClose, onBookAppointment }:
             <h2 className="text-2xl font-bold mb-6 text-blue-700">Book Appointment with {tailorName}</h2>
 
             <form onSubmit={handleSubmit} className="space-y-4">
+              {error && (
+                <div className="rounded-lg bg-red-50 p-3 text-sm text-red-600">
+                  {error}
+                </div>
+              )}
+
               {/* Garment Type Dropdown */}
               <div>
                 <label htmlFor="garmentType" className="block mb-2 text-gray-700">Garment Type</label>
@@ -190,7 +228,7 @@ export default function BookingModal({ tailorName, onClose, onBookAppointment }:
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-700">Estimated Completion:</span>
-                    <span className="font-bold text-green-700">{completionDate}</span>
+                    <span className="font-bold text-green-700">{completionDateLabel}</span>
                   </div>
                 </div>
               )}
@@ -199,20 +237,20 @@ export default function BookingModal({ tailorName, onClose, onBookAppointment }:
               <button 
                 type="submit" 
                 className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors"
-                disabled={!garmentType || !complexity}
-              >
-                Proceed to Payment
-              </button>
+                disabled={!garmentType || !complexity || isPreparingBooking}
+                  >
+                    {isPreparingBooking ? 'Preparing Booking...' : 'Proceed to Payment'}
+                  </button>
             </form>
           </div>
         </div>
       )}
 
       {/* M-Pesa Payment Modal */}
-      {showMpesaModal && bookingDetails && (
+      {showMpesaModal && bookingDetails && activeBookingId && (
         <MpesaPaymentModal 
           amount={bookingDetails.estimatedPrice}
-          bookingId={`BOOKING-${Date.now()}`}
+          bookingId={activeBookingId}
           onClose={handlePaymentCancel}
           onPaymentSuccess={handlePaymentSuccess}
         />

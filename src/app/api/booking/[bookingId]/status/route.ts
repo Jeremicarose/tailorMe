@@ -7,9 +7,10 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { bookingId: string } }
+  context: { params: Promise<{ bookingId: string }> }
 ) {
   try {
+    const { bookingId } = await context.params
     const session = await getServerSession()
     
     if (!session?.user?.email) {
@@ -28,7 +29,7 @@ export async function PATCH(
 
     // Update the booking status
     const booking = await prisma.booking.update({
-      where: { id: params.bookingId },
+      where: { id: bookingId },
       data: { status: data.status },
       include: {
         user: {

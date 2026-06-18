@@ -13,13 +13,13 @@ export interface User {
     services?: {
       id: string;
       name: string;
-      descritption?: string | null;
+      description?: string | null;
       price: number;
     }[];
     availabilityStatus?: string;
     maxDailyBookings?: number;
     bookingNoticePeriod?: string;
-    unavailableDates?: string | null;
+    unavailableDates?: string[] | null;
   };
 }
 
