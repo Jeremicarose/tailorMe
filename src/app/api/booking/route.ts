@@ -127,7 +127,16 @@ export async function GET(request: Request) {
             }
           }
         },
-        availability: true
+        availability: true,
+        messages: {
+          where: {
+            isRead: false,
+            senderId: { not: user.id }
+          },
+          select: {
+            id: true
+          }
+        }
       },
       orderBy: {
         createdAt: 'desc'

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import BookingConversation from '@/app/components/BookingConversation'
 import {
     Clock,
     CheckCircle,
@@ -24,6 +25,9 @@ interface Order {
     id: string
     status: 'completed' | 'in-progress' | 'pending' | 'cancelled'
     paymentStatus: 'UNPAID' | 'INITIATED' | 'PAID' | 'FAILED' | 'CANCELLED'
+    unreadCount: number
+    lastAppointmentReminderSentAt?: string
+    lastDeliveryReminderSentAt?: string
     date: string
     estimatedCompletionTime?: string
     customerName?: string
@@ -92,6 +96,9 @@ const Orders: React.FC = () => {
                     price: typeof booking.measurements?.estimatedPrice === 'number' ? booking.measurements.estimatedPrice : undefined,
                     notes: booking.notes || undefined,
                     paymentStatus: booking.paymentStatus ?? 'UNPAID',
+                    unreadCount: Array.isArray(booking.messages) ? booking.messages.length : 0,
+                    lastAppointmentReminderSentAt: booking.lastAppointmentReminderSentAt ?? undefined,
+                    lastDeliveryReminderSentAt: booking.lastDeliveryReminderSentAt ?? undefined,
                 }))
                 : []
 
@@ -347,7 +354,14 @@ const Orders: React.FC = () => {
                                                         #{order.id.substring(0, 8)}
                                                     </td>
                                                     <td className="py-4 px-4 text-sm text-slate-600">
-                                                        {order.customerName || 'N/A'}
+                                                        <div className="flex items-center gap-2">
+                                                            <span>{order.customerName || 'N/A'}</span>
+                                                            {order.unreadCount > 0 && (
+                                                                <span className="rounded-full bg-orange-500 px-2 py-0.5 text-xs font-semibold text-white">
+                                                                    {order.unreadCount} new
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </td>
                                                     <td className="py-4 px-4 text-sm text-slate-600">
                                                         {order.service || 'N/A'}
@@ -420,8 +434,43 @@ const Orders: React.FC = () => {
 
                                                     <p className="text-sm text-slate-500 mb-1">Payment Status</p>
                                                     <p className="text-sm font-medium mb-3">{order.paymentStatus}</p>
+
+                                                    <p className="text-sm text-slate-500 mb-1">Last Appointment Reminder</p>
+                                                    <p className="text-sm font-medium mb-3">
+                                                      {order.lastAppointmentReminderSentAt ? new Date(order.lastAppointmentReminderSentAt).toLocaleString() : 'Not sent'}
+                                                    </p>
+
+                                                    <p className="text-sm text-slate-500 mb-1">Last Delivery Reminder</p>
+                                                    <p className="text-sm font-medium mb-3">
+                                                      {order.lastDeliveryReminderSentAt ? new Date(order.lastDeliveryReminderSentAt).toLocaleString() : 'Not sent'}
+                                                    </p>
                                                 </div>
                                             </div>
+                                            <div className="mt-4 flex gap-3">
+                                                <button
+                                                  type="button"
+                                                  onClick={async () => {
+                                                    await fetch(`/api/bookings/${order.id}/reminder`, {
+                                                      method: 'POST',
+                                                      headers: { 'Content-Type': 'application/json' },
+                                                      body: JSON.stringify({ target: 'TAILOR' })
+                                                    })
+                                                  }}
+                                                  className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                                                >
+                                                  Remind Tailor
+                                                </button>
+                                            </div>
+                                            <BookingConversation
+                                              bookingId={order.id}
+                                              onConversationOpened={() => {
+                                                setOrders((previous) =>
+                                                  previous.map((item) =>
+                                                    item.id === order.id ? { ...item, unreadCount: 0 } : item
+                                                  )
+                                                )
+                                              }}
+                                            />
                                             {order.notes && (
                                                 <div className="mt-2">
                                                     <p className="text-sm text-slate-500 mb-1">Notes</p>

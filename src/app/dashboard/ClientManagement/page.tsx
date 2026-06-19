@@ -17,21 +17,47 @@ interface Client {
   }
 }
 
+interface ReminderRun {
+  id: string
+  triggerType: 'ADMIN' | 'TOKEN'
+  status: 'RUNNING' | 'SUCCESS' | 'FAILED' | 'DRY_RUN'
+  triggeredBy?: string | null
+  totalBookingsScanned: number
+  appointmentRemindersDue: number
+  appointmentRemindersSent: number
+  deliveryRemindersDue: number
+  deliveryRemindersSent: number
+  errorMessage?: string | null
+  startedAt: string
+  completedAt?: string | null
+}
+
 function ClientManagement() {
   const [clients, setClients] = useState<Client[]>([])
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [reminderRunResult, setReminderRunResult] = useState<string | null>(null)
+  const [reminderRuns, setReminderRuns] = useState<ReminderRun[]>([])
 
   useEffect(() => {
-    const fetchClients = async () => {
+    const fetchData = async () => {
       try {
-        const response = await fetch('/api/admin/payment-overview')
-        if (!response.ok) {
+        const [clientsResponse, runsResponse] = await Promise.all([
+          fetch('/api/admin/payment-overview'),
+          fetch('/api/admin/reminders/run')
+        ])
+
+        if (!clientsResponse.ok) {
           throw new Error('Failed to load payment overview')
         }
 
-        const data = await response.json()
+        if (!runsResponse.ok) {
+          throw new Error('Failed to load reminder history')
+        }
+
+        const data = await clientsResponse.json()
+        const runsData = await runsResponse.json()
         const mappedClients: Client[] = Array.isArray(data)
           ? data.map((booking: any) => ({
               id: booking.id,
@@ -52,21 +78,50 @@ function ClientManagement() {
           : []
 
         setClients(mappedClients)
+        setReminderRuns(Array.isArray(runsData) ? runsData : [])
       } catch (fetchError) {
         setError(fetchError instanceof Error ? fetchError.message : 'Failed to load payment overview')
       }
     }
 
-    fetchClients()
+    fetchData()
   }, [])
 
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-bold mb-6">Client Management</h1>
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <h1 className="text-2xl font-bold">Client Management</h1>
+        <button
+          type="button"
+          onClick={async () => {
+            const response = await fetch('/api/admin/reminders/run', {
+              method: 'POST'
+            })
+            const data = await response.json().catch(() => null)
+            if (response.ok) {
+              setReminderRunResult(`Sent ${data?.appointmentRemindersSent ?? 0} appointment reminders and ${data?.deliveryRemindersSent ?? 0} delivery reminders`)
+              const refreshedRuns = await fetch('/api/admin/reminders/run')
+              const runsData = await refreshedRuns.json().catch(() => [])
+              setReminderRuns(Array.isArray(runsData) ? runsData : [])
+            } else {
+              setReminderRunResult(data?.error || 'Failed to run reminders')
+            }
+          }}
+          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+        >
+          Run Reminders
+        </button>
+      </div>
 
       {error && (
         <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
+        </div>
+      )}
+
+      {reminderRunResult && (
+        <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+          {reminderRunResult}
         </div>
       )}
 
@@ -103,6 +158,38 @@ function ClientManagement() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="mt-6 overflow-hidden rounded-lg border border-gray-200 bg-white shadow">
+        <div className="border-b border-gray-200 bg-gray-50 px-6 py-4">
+          <h2 className="text-lg font-semibold text-gray-900">Reminder Run History</h2>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Started</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Trigger</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Scanned</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Appointment</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Delivery</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 bg-white">
+              {reminderRuns.map((run) => (
+                <tr key={run.id}>
+                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-700">{new Date(run.startedAt).toLocaleString()}</td>
+                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-700">{run.triggerType}</td>
+                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-700">{run.status}</td>
+                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-700">{run.totalBookingsScanned}</td>
+                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-700">{run.appointmentRemindersSent}/{run.appointmentRemindersDue}</td>
+                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-700">{run.deliveryRemindersSent}/{run.deliveryRemindersDue}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Details Dialog */}

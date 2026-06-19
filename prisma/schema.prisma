@@ -185,6 +185,8 @@ model Booking {
   paymentRequestedAt DateTime?
   paymentConfirmedAt DateTime?
   paymentFailureReason String?
+  lastAppointmentReminderSentAt DateTime?
+  lastDeliveryReminderSentAt DateTime?
   notes      String?
   
   // Communication
@@ -241,6 +243,21 @@ model Project {
   updatedAt   DateTime @updatedAt
 }
 
+model ReminderRun {
+  id                       String              @id @default(cuid())
+  triggerType              ReminderTriggerType
+  status                   ReminderRunStatus   @default(RUNNING)
+  triggeredBy              String?
+  totalBookingsScanned     Int                 @default(0)
+  appointmentRemindersDue  Int                 @default(0)
+  appointmentRemindersSent Int                 @default(0)
+  deliveryRemindersDue     Int                 @default(0)
+  deliveryRemindersSent    Int                 @default(0)
+  errorMessage             String?
+  startedAt                DateTime            @default(now())
+  completedAt              DateTime?
+}
+
 enum UserRole {
   CUSTOMER
   TAILOR
@@ -285,4 +302,16 @@ enum TailorVerificationStatus {
   PENDING
   VERIFIED
   REJECTED
+}
+
+enum ReminderRunStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+  DRY_RUN
+}
+
+enum ReminderTriggerType {
+  ADMIN
+  TOKEN
 }

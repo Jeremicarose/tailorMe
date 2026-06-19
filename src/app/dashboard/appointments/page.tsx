@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Calendar, Clock, User, Scissors, AlertCircle } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
+import BookingConversation from '@/app/components/BookingConversation'
 
 interface Appointment {
   id: string
@@ -12,6 +13,9 @@ interface Appointment {
   service: string
   status: 'PENDING' | 'ACCEPTED' | 'IN_PROGRESS' | 'READY_FOR_FITTING' | 'CANCELLED'
   paymentStatus: 'UNPAID' | 'INITIATED' | 'PAID' | 'FAILED' | 'CANCELLED'
+  unreadCount: number
+  lastAppointmentReminderSentAt?: string
+  lastDeliveryReminderSentAt?: string
 }
 
 export default function UpcomingAppointments() {
@@ -105,6 +109,11 @@ export default function UpcomingAppointments() {
                         <h2 className="text-xl font-semibold text-gray-900">
                           {appointment.customerName}
                         </h2>
+                        {appointment.unreadCount > 0 && (
+                          <span className="rounded-full bg-orange-500 px-2 py-0.5 text-xs font-semibold text-white">
+                            {appointment.unreadCount} new
+                          </span>
+                        )}
                       </div>
                       
                       <div className="grid gap-2">
@@ -123,6 +132,14 @@ export default function UpcomingAppointments() {
                         <div className="flex items-center gap-2 text-gray-600">
                           <span className="font-medium">Payment:</span>
                           <span>{appointment.paymentStatus}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <span className="font-medium">Last Reminder:</span>
+                          <span>
+                            {appointment.lastAppointmentReminderSentAt
+                              ? new Date(appointment.lastAppointmentReminderSentAt).toLocaleString()
+                              : 'Not sent'}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -155,6 +172,31 @@ export default function UpcomingAppointments() {
                       )}
                     </div>
                   </div>
+                  <div className="mt-4 flex gap-3">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await fetch(`/api/bookings/${appointment.id}/reminder`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ target: 'CUSTOMER' })
+                        })
+                      }}
+                      className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                    >
+                      Remind Customer
+                    </button>
+                  </div>
+                  <BookingConversation
+                    bookingId={appointment.id}
+                    onConversationOpened={() => {
+                      setAppointments((previous) =>
+                        previous.map((item) =>
+                          item.id === appointment.id ? { ...item, unreadCount: 0 } : item
+                        )
+                      )
+                    }}
+                  />
                 </CardContent>
               </Card>
             ))}

@@ -54,7 +54,8 @@ export async function GET() {
         prisma.message.count({
           where: {
             booking: { tailorId: user.tailorProfile.id },
-            isRead: false
+            isRead: false,
+            senderId: { not: user.id }
           }
         }),
       ])

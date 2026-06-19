@@ -54,6 +54,15 @@ export async function GET() {
             startTime: true,
             endTime: true
           }
+        },
+        messages: {
+          where: {
+            isRead: false,
+            senderId: { not: user.id }
+          },
+          select: {
+            id: true
+          }
         }
       }
     })
@@ -67,6 +76,9 @@ export async function GET() {
       service: booking.description || 'Tailoring Service',
       status: booking.status,
       paymentStatus: booking.paymentStatus,
+      unreadCount: booking.messages.length,
+      lastAppointmentReminderSentAt: booking.lastAppointmentReminderSentAt,
+      lastDeliveryReminderSentAt: booking.lastDeliveryReminderSentAt,
       }))
       .sort((left, right) => {
         const leftValue = `${left.date}T${left.time}`

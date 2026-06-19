@@ -44,6 +44,7 @@ Copy `.env.example` to `.env` and provide values for:
 - `MPESA_CALLBACK_URL`
 - `MPESA_CALLBACK_TOKEN`
 - `MPESA_CALLBACK_IP_ALLOWLIST`
+- `REMINDER_RUNNER_TOKEN`
 
 For PostgreSQL staging or production preparation, see:
 
@@ -75,6 +76,7 @@ npm run db:studio:postgres
 - Staging deployment and smoke-test steps are in [docs/staging-deployment-checklist.md](/Users/jeremicarose/Documents/tailor-me/docs/staging-deployment-checklist.md).
 - Readiness tracking is in [docs/postgres-production-readiness-matrix.md](/Users/jeremicarose/Documents/tailor-me/docs/postgres-production-readiness-matrix.md).
 - A runtime health endpoint is available at `/api/health`.
+- Reminder runner operations are documented in [docs/reminder-runner-operations.md](/Users/jeremicarose/Documents/tailor-me/docs/reminder-runner-operations.md).
 - Production build depends on a working Next SWC binary and normal network access for dependency installation.
 - For M-Pesa callbacks, `MPESA_CALLBACK_URL` should point to `/api/booking/payment/callback`.
 - If `MPESA_CALLBACK_TOKEN` is set, it is automatically appended to the callback URL and verified on callback receipt.
